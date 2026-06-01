@@ -34,8 +34,3 @@ python mcnp_outp_viewer.py
 
 - This tool uses text-pattern parsing because MCNP `outp` files are plain text.
 - It works best when the output file contains echoed input cards.
-
-## Recommended repository scope
-
-This repository is focused on the standalone `mcnp_outp_viewer.py` tool.
-If you later build additional MCNP post-processing tools, it is usually better to create a separate umbrella repository such as `mcnp-tools` rather than splitting unrelated tools across branches.
