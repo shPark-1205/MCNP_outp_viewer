@@ -45,6 +45,13 @@ FLOAT_RE = r"[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[Ee][+-]?\d+)?"
 APP_VERSION = "2026-05-28-v13-sort-excel-number"
 UI_FONT_POINT_SIZE = 11.0
 PREVIEW_ROW_LIMIT_DEFAULT = 500
+TALLY_TABLE_HEADERS = ["Export", "File", "Tally", "Type", "Category", "FC name", "F card"]
+TRANSFORMABLE_RESULT_COLUMNS = [
+    "tally_value",
+    "raw_tally",
+    "tally_per_delta_E",
+    "tally_per_lethargy",
+]
 
 
 def parse_user_number(text_value, default: float = 0.0) -> float:
@@ -304,6 +311,14 @@ class TallyInfo:
     category: str
 
 
+def classify_tally_category(has_fs: bool, has_e: bool) -> str:
+    if has_fs:
+        return "FS segment"
+    if has_e:
+        return "Energy bin"
+    return "Simple"
+
+
 def list_tallies(path: str | Path) -> List[TallyInfo]:
     path = Path(path)
     text = read_text(path)
@@ -342,13 +357,7 @@ def list_tallies(path: str | Path) -> List[TallyInfo]:
         has_fs = f"FS{no}" in cards
         has_e = f"E{no}" in cards or (block_has_energy_table(block) if block else False)
 
-        if has_fs:
-            category = "FS segment"
-        elif has_e:
-            category = "Energy bin"
-        else:
-            category = "Simple"
-
+        category = classify_tally_category(has_fs, has_e)
         infos.append(TallyInfo(path, no, fc, f_card, tally_type, has_fs, has_e, category))
     return infos
 
@@ -694,12 +703,13 @@ def extract_tally(info: TallyInfo) -> List[Dict[str, object]]:
             }
         )
     # Put metadata columns first.
-    return [{k: row[k] for k in ["file", "tally", "fc_name", "tally_type", "tally_value", "relative_error"] if k in row} for row in simple_rows]
+    ordered_columns = ["file", "tally", "fc_name", "tally_type", "tally_value", "relative_error"]
+    return [{key: row[key] for key in ordered_columns if key in row} for row in simple_rows]
 
 
 
 
-def _as_float_or_none(value):
+def _as_float_or_none(value: object) -> Optional[float]:
     """Convert a value to float when possible; return None for blanks/NaN-like values."""
     if value is None:
         return None
@@ -732,17 +742,10 @@ def apply_multiplier_offset(
     - tally_per_delta_E: raw_tally / delta_E_MeV
     - tally_per_lethargy: raw_tally / log_delta_E
     """
-    result_columns = [
-        "tally_value",
-        "raw_tally",
-        "tally_per_delta_E",
-        "tally_per_lethargy",
-    ]
-
     transformed: List[Dict[str, object]] = []
     for row in rows:
         new_row = dict(row)
-        for col in result_columns:
+        for col in TRANSFORMABLE_RESULT_COLUMNS:
             if col not in row:
                 continue
             x = _as_float_or_none(row.get(col))
@@ -872,8 +875,8 @@ def main() -> None:
             left_widget = QWidget()
             left_layout = QVBoxLayout(left_widget)
             left_layout.addWidget(QLabel("Tally list"))
-            self.tally_table = QTableWidget(0, 7)
-            self.tally_table.setHorizontalHeaderLabels(["Export", "File", "Tally", "Type", "Category", "FC name", "F card"])
+            self.tally_table = QTableWidget(0, len(TALLY_TABLE_HEADERS))
+            self.tally_table.setHorizontalHeaderLabels(TALLY_TABLE_HEADERS)
             self.tally_table.setSelectionBehavior(QAbstractItemView.SelectRows)
             self.tally_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
             self.tally_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -903,7 +906,7 @@ def main() -> None:
             self.addend_edit.setPlaceholderText("e.g., 0")
             self.addend_edit.setMaximumWidth(130)
             transform_layout.addWidget(self.addend_edit)
-            transform_layout.addWidget(QLabel("Adjusted = Raw tally × Multiplier + Add/Offset"))
+            transform_layout.addWidget(QLabel("Adjusted = Raw tally x Multiplier + Add/Offset"))
             transform_layout.addSpacing(18)
             transform_layout.addWidget(QLabel("Preview rows:"))
             self.preview_limit_edit = QLineEdit(str(PREVIEW_ROW_LIMIT_DEFAULT))
